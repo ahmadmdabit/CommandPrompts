@@ -14,13 +14,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ISessionRepository repository;
     private SessionViewModel? selectedSession;
     private bool isLoading;
+    private bool hasLoaded;
 
     public MainViewModel()
     {
         executor = new ProcessExecutor();
         repository = new SessionRepository();
 
-        NewSessionCommand = new RelayCommand(_ => CreateNewSession());
+        NewSessionCommand = new AsyncRelayCommand(_ => CreateNewSessionAsync());
         DeleteSessionCommand = new AsyncRelayCommand(
             _ => DeleteSelectedSessionAsync(),
             _ => SelectedSession is not null);
@@ -51,17 +52,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private async Task LoadSessionsAsync()
     {
+        if (hasLoaded)
+            return;
+        hasLoaded = true;
+
         IsLoading = true;
+        var dispatcher = System.Windows.Application.Current.Dispatcher;
         try
         {
-            var sessions = await repository.LoadAllAsync();
-            foreach (var s in sessions)
-            {
-                Sessions.Add(new SessionViewModel(s, executor, repository));
-            }
+            foreach (var existing in Sessions)
+                existing.Dispose();
 
-            if (Sessions.Count > 0)
-                SelectedSession = Sessions[0];
+            Sessions.Clear();
+
+            var sessions = await repository.LoadAllAsync();
+            await dispatcher.InvokeAsync(() =>
+            {
+                foreach (var s in sessions)
+                {
+                    Sessions.Add(new SessionViewModel(s, executor, repository));
+                }
+
+                if (Sessions.Count > 0)
+                    SelectedSession = Sessions[0];
+            }, System.Windows.Threading.DispatcherPriority.Background);
         }
         finally
         {
@@ -69,7 +83,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void CreateNewSession()
+    private async Task CreateNewSessionAsync()
     {
         var session = new Session
         {
@@ -82,8 +96,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Sessions.Add(vm);
         SelectedSession = vm;
 
-        // Persist immediately
-        _ = repository.SaveAsync(session);
+        await repository.SaveAsync(session);
     }
 
     private async Task DeleteSelectedSessionAsync()
@@ -113,5 +126,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         foreach (var s in Sessions)
             s.Dispose();
+
+        (repository as IDisposable)?.Dispose();
     }
 }

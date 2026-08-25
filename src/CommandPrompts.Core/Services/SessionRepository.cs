@@ -6,14 +6,17 @@ using CommandPrompts.Core.Models;
 
 namespace CommandPrompts.Core.Services;
 
-public sealed class SessionRepository : ISessionRepository
+public sealed class SessionRepository : ISessionRepository, IDisposable
 {
     private readonly string historyDir;
-    private readonly Lock ioLock = new();
+    private const string AppDataSubfolder = "CommandPrompts";
+    private readonly object ioLock = new();
+    private bool disposed;
 
     public SessionRepository()
     {
-        historyDir = Path.Combine(AppContext.BaseDirectory, "History");
+        var basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        historyDir = Path.Combine(basePath, AppDataSubfolder, "History");
         Directory.CreateDirectory(historyDir);
     }
 
@@ -52,32 +55,49 @@ public sealed class SessionRepository : ISessionRepository
     {
         var path = GetSessionFilePath(session.Id);
 
-        // Serialize to pooled buffer first, then write atomically
-        var tempPath = path + ".tmp";
+        // Serialize to a unique temp file in the same dir (same volume => atomic move),
+        // then move into place atomically under the ioLock so concurrent saves on the
+        // same session file don't collide on a shared .tmp path.
+        var tempPath = Path.Combine(historyDir, $"{session.Id:N}.{Guid.NewGuid():N}.tmp");
 
-        await using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write,
-            FileShare.None, bufferSize: 4096, useAsync: true))
-        {
-            await JsonSerializer.SerializeAsync(fs, session,
-                AppJsonContext.Default.Session, ct).ConfigureAwait(false);
-        }
-
-        // Atomic replace
         lock (ioLock)
         {
-            File.Move(tempPath, path, overwrite: true);
+            if (disposed)
+                throw new ObjectDisposedException(nameof(SessionRepository));
+
+            try
+            {
+                using (var fs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write,
+                    FileShare.None, bufferSize: 4096, useAsync: false))
+                {
+                    JsonSerializer.Serialize(fs, session,
+                        AppJsonContext.Default.Session);
+                }
+
+                // Atomic replace
+                File.Move(tempPath, path, overwrite: true);
+            }
+            finally
+            {
+                TryDeleteFile(tempPath);
+            }
         }
     }
 
-    public Task DeleteAsync(Guid sessionId, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid sessionId, CancellationToken ct = default)
     {
         var path = GetSessionFilePath(sessionId);
+
         lock (ioLock)
         {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(SessionRepository));
+
             if (File.Exists(path))
                 File.Delete(path);
         }
-        return Task.CompletedTask;
+
+        await Task.CompletedTask;
     }
 
     private static async Task<Session?> DeserializeFileAsync(string path, CancellationToken ct)
@@ -96,6 +116,29 @@ public sealed class SessionRepository : ISessionRepository
         catch (IOException)
         {
             return null;
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (ioLock)
+        {
+            disposed = true;
         }
     }
 }

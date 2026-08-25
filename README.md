@@ -18,7 +18,7 @@ src/
 
 - `Abstractions/` — `IProcessExecutor`, `ISessionRepository`. The App layer depends only on these interfaces.
 - `Models/` — `Session`, `ExecutionRecord`, `OutputEntry`, `EnvironmentVariable`.
-- `Services/` — implementations: `ProcessExecutor` (async process lifecycle via `TaskCompletionSource` + event-based exit, non-blocking line pumping with cancellation support), `SessionRepository` (file-per-session JSON persistence under `History/`, guarded by a `Lock`), `DebouncedAction` (UI-thread-safe save debouncing).
+- `Services/` — implementations: `ProcessExecutor` (async process lifecycle via `TaskCompletionSource` + event-based exit; returns the real process `ExitCode`, validates command/working-directory before start, observes cancellation and `Win32Exception` on terminate), `SessionRepository` (file-per-session JSON persistence under `%LOCALAPPDATA%\CommandPrompts\History`; each save writes a uniquely-named temp file and holds the `ioLock` across serialize+write+move for atomic, collision-free replacement; implements `IDisposable`), `DebouncedAction` (UI-thread-safe save debouncing with a `FlushAsync` for deterministic final writes).
 
 Dependency direction is strictly one-way: App → Core abstractions → implementations. Swapping the repository or executor requires no change to ViewModels or models.
 

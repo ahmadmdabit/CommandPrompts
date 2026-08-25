@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -8,19 +9,40 @@ namespace CommandPrompts.Core.Services;
 
 public sealed class ProcessExecutor : IProcessExecutor
 {
-    public async Task ExecuteAsync(
+    public async Task<int> ExecuteAsync(
         Session session,
         Action<ProcessOutputLine> onOutput,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(onOutput);
+
+        if (string.IsNullOrWhiteSpace(session.Command))
+        {
+            onOutput(new ProcessOutputLine(OutputKind.System, "Command is required."));
+            return -1;
+        }
+
+        ct.ThrowIfCancellationRequested();
         using var process = new Process();
         var si = process.StartInfo;
 
         si.FileName = session.Command;
         si.Arguments = session.Arguments;
-        si.WorkingDirectory = string.IsNullOrWhiteSpace(session.WorkingDirectory)
-            ? AppContext.BaseDirectory
-            : session.WorkingDirectory;
+
+        if (!string.IsNullOrWhiteSpace(session.WorkingDirectory))
+        {
+            if (!Directory.Exists(session.WorkingDirectory))
+            {
+                onOutput(new ProcessOutputLine(
+                    OutputKind.System,
+                    $"Working directory does not exist: {session.WorkingDirectory}"));
+
+                return -1;
+            }
+
+            si.WorkingDirectory = session.WorkingDirectory;
+        }
 
         si.UseShellExecute = false;
         si.CreateNoWindow = true;
@@ -57,7 +79,7 @@ public sealed class ProcessExecutor : IProcessExecutor
             if (!process.Start())
             {
                 onOutput(new ProcessOutputLine(OutputKind.System, "Failed to start process."));
-                return;
+                return -1;
             }
 
             process.BeginOutputReadLine();
@@ -73,20 +95,37 @@ public sealed class ProcessExecutor : IProcessExecutor
                         onOutput(new ProcessOutputLine(OutputKind.System, "Process terminated by user."));
                     }
                 }
-                catch (InvalidOperationException)
+                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
                 {
-                    // Process already exited — safe to ignore
+                    onOutput(new ProcessOutputLine(
+                        OutputKind.System,
+                        $"Unable to terminate process: {ex.Message}"));
                 }
             });
 
             await tcsExit.Task.ConfigureAwait(false);
 
-            // Allow buffered output to flush
-            try { process.WaitForExit(1000); } catch { /* best-effort flush */ }
+            // Ensure async output handlers flush before returning the final exit code.
+            try
+            {
+                process.WaitForExit();
+            }
+            catch (InvalidOperationException)
+            {
+                // Process already disposed/exited — safe to ignore.
+            }
+
+            ct.ThrowIfCancellationRequested();
+            return process.ExitCode;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             onOutput(new ProcessOutputLine(OutputKind.System, $"Error: {ex.Message}"));
+            return -1;
         }
     }
 }

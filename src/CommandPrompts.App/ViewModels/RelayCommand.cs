@@ -48,6 +48,14 @@ public sealed class AsyncRelayCommand : ICommand
         {
             await execute(parameter);
         }
+        catch (OperationCanceledException)
+        {
+            // Command cancellation is expected.
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Async command failed: {ex}");
+        }
         finally
         {
             Interlocked.Exchange(ref isExecuting, 0);

@@ -6,7 +6,7 @@ public readonly record struct ProcessOutputLine(OutputKind Kind, string Text);
 
 public interface IProcessExecutor
 {
-    Task ExecuteAsync(
+    Task<int> ExecuteAsync(
         Session session,
         Action<ProcessOutputLine> onOutput,
         CancellationToken ct = default);

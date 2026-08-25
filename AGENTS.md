@@ -19,7 +19,7 @@ dotnet run --project src/CommandPrompts.App
 - DI without container: dependencies (`IProcessExecutor`, `ISessionRepository`) injected via constructor into ViewModels; Core defines interfaces in `Abstractions/`, implementations in `Services/`.
 - JSON: source-generated serializer via `[JsonSerializable]` context in `Core/Json/AppJsonContext.cs` (AOT-compatible; Core sets `IsAotCompatible=true`). Add new model types there, not ad-hoc `JsonSerializer` reflection calls.
 - Performance requirements from `resources/Project-Requirements.md` apply to all changes: minimal allocation, thread-safe, fully async/non-blocking, reflection-free where possible.
-- Session history persists as JSON files in `History/` (one file per session).
+- Session history persists as JSON files in `%LOCALAPPDATA%\CommandPrompts\History` (one file per session, write-once temp file per save, atomic replace).
 
 ## Pitfalls
 

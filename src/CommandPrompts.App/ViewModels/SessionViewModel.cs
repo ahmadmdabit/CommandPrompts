@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -11,9 +13,14 @@ namespace CommandPrompts.App.ViewModels;
 
 public sealed class SessionViewModel : ObservableObject, IDisposable
 {
+    private const int MaxDisplayedOutputLines = 10000;
+    private const int MaxStoredOutputLines = 10000;
+    private const int MaxExecutionHistoryEntries = 50;
+
     private readonly IProcessExecutor executor;
     private readonly ISessionRepository repository;
     private readonly DebouncedAction saveDebounce;
+    private readonly Lock executionOutputLock = new();
     private CancellationTokenSource? runCts;
 
     private string name = "New Session";
@@ -41,14 +48,7 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
             ct => this.repository.SaveAsync(Session, ct),
             TimeSpan.FromMilliseconds(500));
 
-        // Load historical output
-        foreach (var exec in session.ExecutionHistory)
-        {
-            foreach (var entry in exec.Output)
-            {
-                OutputLines.Add(new OutputLineViewModel(entry.Kind, entry.Text, entry.Timestamp));
-            }
-        }
+        LoadHistoricalOutput();
 
         RunCommand = new AsyncRelayCommand(_ => RunAsync(), _ => RunState == SessionRunState.Idle);
         TerminateCommand = new RelayCommand(_ => Terminate(), _ => RunState == SessionRunState.Running);
@@ -161,6 +161,17 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
     public ICommand OpenSessionFolderCommand { get; }
     public ICommand CopyAllCommand { get; }
 
+    private void LoadHistoricalOutput()
+    {
+        foreach (var exec in Session.ExecutionHistory)
+        {
+            foreach (var entry in exec.Output)
+            {
+                OutputLines.Add(new OutputLineViewModel(entry.Kind, entry.Text, entry.Timestamp));
+            }
+        }
+    }
+
     private async Task RunAsync()
     {
         if (RunState != SessionRunState.Idle)
@@ -177,12 +188,12 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
         Session.LastRunAt = currentExecution.StartedAt;
         var dispatcher = Application.Current.Dispatcher;
 
-        AppendOutput(OutputKind.System,
+        AddExecutionOutput(currentExecution, OutputKind.System,
             $"▶ Starting: {Command} {Arguments}");
 
         try
         {
-            await executor.ExecuteAsync(Session, line =>
+            var exitCode = await executor.ExecuteAsync(Session, line =>
             {
                 var entry = new OutputEntry
                 {
@@ -191,36 +202,46 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
                     Text = line.Text
                 };
 
-                currentExecution.Output.Add(entry);
+                lock (executionOutputLock)
+                {
+                    currentExecution?.Output.Add(entry);
+                    TrimExecutionOutput(currentExecution);
+                }
 
                 dispatcher.BeginInvoke(() =>
                 {
                     OutputLines.Add(new OutputLineViewModel(line.Kind, line.Text, entry.Timestamp));
-
-                    // Cap displayed output at 10000 lines for UI performance
-                    while (OutputLines.Count > 10000)
-                        OutputLines.RemoveAt(0);
+                    TrimDisplayedOutput();
                 }, DispatcherPriority.Background);
 
             }, runCts.Token);
 
-            currentExecution.ExitCode = 0;
-            AppendOutput(OutputKind.System, "✓ Process exited.");
+            currentExecution.ExitCode = exitCode;
+            AddExecutionOutput(currentExecution, OutputKind.System,
+                exitCode == 0
+                    ? "✓ Process exited."
+                    : $"✓ Process exited with code {exitCode}.");
         }
         catch (OperationCanceledException)
         {
             currentExecution.ExitCode = -1;
-            AppendOutput(OutputKind.System, "⊘ Process terminated.");
+            AddExecutionOutput(currentExecution, OutputKind.System, "⊘ Process terminated.");
         }
         catch (Exception ex)
         {
             currentExecution.ExitCode = -1;
-            AppendOutput(OutputKind.System, $"✗ Error: {ex.Message}");
+            AddExecutionOutput(currentExecution, OutputKind.System, $"✗ Error: {ex.Message}");
         }
         finally
         {
             currentExecution.FinishedAt = DateTimeOffset.UtcNow;
-            Session.ExecutionHistory.Add(currentExecution);
+
+            if (!Session.ExecutionHistory.Contains(currentExecution))
+            {
+                Session.ExecutionHistory.Add(currentExecution);
+                TrimExecutionHistory();
+            }
+
             currentExecution = null;
 
             runCts?.Dispose();
@@ -248,32 +269,61 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
     private void OpenSessionFolder()
     {
         var path = repository.GetSessionFilePath(Session.Id);
-        if (System.IO.File.Exists(path))
+        try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            if (System.IO.File.Exists(path))
             {
-                FileName = "explorer.exe",
-                Arguments = $"/select,\"{path}\"",
-                UseShellExecute = true
-            });
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            else
+            {
+                var dir = System.IO.Path.GetDirectoryName(path)!;
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = dir,
+                    UseShellExecute = true
+                });
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var dir = System.IO.Path.GetDirectoryName(path)!;
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = dir,
-                UseShellExecute = true
-            });
+            MessageBox.Show(
+                $"Unable to open session folder: {ex.Message}",
+                "Open Folder Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
 
-    private void AppendOutput(OutputKind kind, string text)
+    private void AddExecutionOutput(ExecutionRecord? execution, OutputKind kind, string text)
     {
-        var ts = DateTimeOffset.UtcNow;
+        var entry = new OutputEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = kind,
+            Text = text
+        };
+
+        if (execution is not null)
+        {
+            lock (executionOutputLock)
+            {
+                execution.Output.Add(entry);
+                TrimExecutionOutput(execution);
+            }
+        }
+
         Application.Current.Dispatcher.BeginInvoke(() =>
-            OutputLines.Add(new OutputLineViewModel(kind, text, ts)), DispatcherPriority.Background);
+        {
+            OutputLines.Add(new OutputLineViewModel(kind, text, entry.Timestamp));
+            TrimDisplayedOutput();
+        }, DispatcherPriority.Background);
     }
 
     private void ParseEnvironmentVariables(string text)
@@ -292,10 +342,16 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
             if (eqIdx <= 0)
                 continue;
 
+            var key = trimmed[..eqIdx].Trim().ToString();
+            var value = trimmed[(eqIdx + 1)..].Trim().ToString();
+
+            if (key.Length == 0 || key.Contains('\0') || value.Contains('\0'))
+                continue;
+
             Session.EnvironmentVariables.Add(new Core.Models.EnvironmentVariable
             {
-                Key = trimmed[..eqIdx].Trim().ToString(),
-                Value = trimmed[(eqIdx + 1)..].Trim().ToString()
+                Key = key,
+                Value = value
             });
         }
     }
@@ -304,15 +360,84 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
 
     private void CopyAllOutput()
     {
+        if (OutputLines.Count == 0)
+            return;
+
         var text = string.Join(Environment.NewLine,
             OutputLines.Select(l => $"[{l.TimestampFormatted}] [{l.KindLabel}] {l.Text}"));
-        Clipboard.SetText(text);
+
+        TrySetClipboardText(text);
+    }
+
+    private void TrimDisplayedOutput()
+    {
+        while (OutputLines.Count > MaxDisplayedOutputLines)
+            OutputLines.RemoveAt(0);
+    }
+
+    private static void TrimExecutionOutput(ExecutionRecord? execution)
+    {
+        if (execution is null)
+            return;
+
+        while (execution.Output.Count > MaxStoredOutputLines)
+            execution.Output.RemoveAt(0);
+    }
+
+    private void TrimExecutionHistory()
+    {
+        while (Session.ExecutionHistory.Count > MaxExecutionHistoryEntries)
+            Session.ExecutionHistory.RemoveAt(0);
+    }
+
+    private static void TrySetClipboardText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch (ExternalException ex)
+        {
+            MessageBox.Show(
+                $"Unable to access the clipboard: {ex.Message}",
+                "Clipboard Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     public void Dispose()
     {
         runCts?.Cancel();
+
+        if (currentExecution is { } execution && !Session.ExecutionHistory.Contains(execution))
+        {
+            execution.FinishedAt ??= DateTimeOffset.UtcNow;
+            execution.ExitCode ??= -1;
+            Session.ExecutionHistory.Add(execution);
+            TrimExecutionHistory();
+        }
+
         runCts?.Dispose();
+        runCts = null;
+
+        SaveImmediately();
+
         saveDebounce.Dispose();
+    }
+
+    private void SaveImmediately()
+    {
+        try
+        {
+            repository.SaveAsync(Session).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to save session: {ex}");
+        }
     }
 }

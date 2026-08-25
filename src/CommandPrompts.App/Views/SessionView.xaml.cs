@@ -1,7 +1,9 @@
 using System.Collections.Specialized;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 using CommandPrompts.App.ViewModels;
 
@@ -9,6 +11,10 @@ namespace CommandPrompts.App.Views;
 
 public partial class SessionView : UserControl
 {
+    private INotifyCollectionChanged? outputCollection;
+    private CommandBinding? copyCommandBinding;
+    private ScrollViewer? outputScrollViewer;
+
     public SessionView()
     {
         InitializeComponent();
@@ -18,19 +24,32 @@ public partial class SessionView : UserControl
 
     private void OnLoaded(object sender, System.Windows.RoutedEventArgs e)
     {
-        if (OutputListBox.ItemsSource is INotifyCollectionChanged ncc)
-            ncc.CollectionChanged += OnOutputCollectionChanged;
+        SubscribeToOutputCollection();
 
-        CommandBindings.Add(new CommandBinding(
-            ApplicationCommands.Copy,
-            OnCopyExecuted,
-            OnCopyCanExecute));
+        if (copyCommandBinding is null)
+        {
+            copyCommandBinding = new CommandBinding(
+                ApplicationCommands.Copy,
+                OnCopyExecuted,
+                OnCopyCanExecute);
+
+            CommandBindings.Add(copyCommandBinding);
+        }
+
+        outputScrollViewer ??= FindVisualChild<ScrollViewer>(OutputListBox);
     }
 
     private void OnUnloaded(object sender, System.Windows.RoutedEventArgs e)
     {
-        if (OutputListBox.ItemsSource is INotifyCollectionChanged ncc)
-            ncc.CollectionChanged -= OnOutputCollectionChanged;
+        UnsubscribeFromOutputCollection();
+
+        if (copyCommandBinding is not null)
+        {
+            CommandBindings.Remove(copyCommandBinding);
+            copyCommandBinding = null;
+        }
+
+        outputScrollViewer = null;
     }
 
     private void OnOutputCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -40,28 +59,27 @@ public partial class SessionView : UserControl
             // Scroll to the last item
             OutputListBox.ScrollIntoView(OutputListBox.Items[^1]);
 
-            // Force scroll to bottom by accessing the ScrollViewer
+            // Ensure scroll to bottom by accessing the ScrollViewer
             Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
-                var scrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(OutputListBox);
-                if (scrollViewer != null)
-                {
-                    scrollViewer.ScrollToBottom();
-                }
+                OutputListBox.ScrollIntoView(OutputListBox.Items[^1]);
+
+                outputScrollViewer ??= FindVisualChild<ScrollViewer>(OutputListBox);
+                outputScrollViewer?.ScrollToBottom();
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {
-        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            var child = VisualTreeHelper.GetChild(parent, i);
             if (child is T typedChild)
                 return typedChild;
 
             var descendant = FindVisualChild<T>(child);
-            if (descendant != null)
+            if (descendant is not null)
                 return descendant;
         }
         return null;
@@ -82,6 +100,45 @@ public partial class SessionView : UserControl
             .OrderBy(l => l.Timestamp)
             .Select(l => l.Text);
 
-        Clipboard.SetText(string.Join(Environment.NewLine, lines));
+        TrySetClipboardText(string.Join(System.Environment.NewLine, lines));
+    }
+
+    private void SubscribeToOutputCollection()
+    {
+        if (ReferenceEquals(outputCollection, OutputListBox.ItemsSource))
+            return;
+
+        UnsubscribeFromOutputCollection();
+
+        outputCollection = OutputListBox.ItemsSource as INotifyCollectionChanged;
+        if (outputCollection is not null)
+            outputCollection.CollectionChanged += OnOutputCollectionChanged;
+    }
+
+    private void UnsubscribeFromOutputCollection()
+    {
+        if (outputCollection is not null)
+            outputCollection.CollectionChanged -= OnOutputCollectionChanged;
+
+        outputCollection = null;
+    }
+
+    private static void TrySetClipboardText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch (ExternalException ex)
+        {
+            MessageBox.Show(
+                $"Unable to access the clipboard: {ex.Message}",
+                "Clipboard Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 }
