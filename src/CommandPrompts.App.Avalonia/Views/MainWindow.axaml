@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CommandPrompts.App.Avalonia.ViewModels"
+        xmlns:views="using:CommandPrompts.App.Avalonia.Views"
+        x:Class="CommandPrompts.App.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Command Prompts"
+        Icon="/Assets/CommandPrompts.App.ico"
+        Background="{StaticResource BackgroundBrush}"
+        Width="1200" Height="750"
+        MinWidth="800" MinHeight="500"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid Margin="4" RowDefinitions="Auto,Auto,*">
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+            <Button Content="＋ New Session" Command="{Binding NewSessionCommand}" />
+            <Button Classes.destructive="True" Command="{Binding DeleteSessionCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="X" FontSize="10" VerticalAlignment="Center" />
+                    <TextBlock Text="Delete" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <!-- Session buttons (WrapPanel, max 3 rows, vertical scroll) -->
+        <Border Grid.Row="1" Background="{StaticResource GroupBrush}" CornerRadius="6"
+                Padding="8" Margin="0,0,0,6"
+                IsVisible="{Binding Sessions.Count}">
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Left" Text="Sessions:" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{StaticResource ForegroundBrush}" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              MaxHeight="80">
+                    <ItemsControl ItemsSource="{Binding Sessions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SessionViewModel">
+                                <Button Classes.sessionItem="True"
+                                        Background="{Binding SelectedBackground}"
+                                        Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).SelectSessionCommand}"
+                                        CommandParameter="{Binding}"
+                                        MinWidth="80" Margin="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <Ellipse Width="8" Height="8" Fill="Gray" IsVisible="{Binding !IsRunning}" />
+                                        <Ellipse Width="8" Height="8" Fill="{StaticResource RunningIndicatorBrush}" IsVisible="{Binding IsRunning}" />
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <!-- Empty state -->
+        <TextBlock Grid.Row="1" Grid.Column="0"
+                   IsVisible="{Binding !Sessions.Count}"
+                   Text="No sessions yet — click ＋ New Session to create one."
+                   Foreground="{StaticResource TimestampBrush}" Margin="0,8,0,0" />
+
+        <!-- Session detail -->
+        <ContentControl Grid.Row="2"
+                        Content="{Binding SelectedSession}">
+            <ContentControl.DataTemplates>
+                <DataTemplate x:DataType="vm:SessionViewModel">
+                    <views:SessionView />
+                </DataTemplate>
+            </ContentControl.DataTemplates>
+        </ContentControl>
+    </Grid>
+</Window>

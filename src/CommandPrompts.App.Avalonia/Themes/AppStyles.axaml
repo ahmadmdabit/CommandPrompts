@@ -1,0 +1,137 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--  Control styles ported from WPF Theme.xaml (triggers → Avalonia pseudo-class selectors)  -->
+
+    <!--  Implicit Button style: accent fill, rounded, hover dim  -->
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="Margin" Value="2" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="root"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button:pointerover /template/ Border#root">
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+    <Style Selector="Button:disabled /template/ Border#root">
+        <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <!--  Secondary Button (Clear Output, Locate File…)  -->
+    <Style Selector="Button.secondary">
+        <Setter Property="Background" Value="{StaticResource SecondaryBackgroundBrush}" />
+    </Style>
+
+    <!--  Destructive Button (Terminate, Delete)  -->
+    <Style Selector="Button.destructive">
+        <Setter Property="Background" Value="{StaticResource ErrorBrush}" />
+    </Style>
+
+    <!--  Session item button (used by WrapPanel in MainWindow)  -->
+    <Style Selector="Button.sessionItem">
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style Selector="Button.sessionItem:pointerover">
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+
+    <!--  TextBox: dark surface + mono font (BaseTextBoxStyle)  -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4,3" />
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Courier New" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="CaretBrush" Value="{StaticResource ForegroundBrush}" />
+        <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <!--  Rounded borderless TextBox inside a styled Border (RoundedTextBoxStyle)  -->
+    <Style Selector="TextBox.rounded">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <Style Selector="Border.roundedTextBoxBorder">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+
+    <!--  Console output ListBox: transparent over the console background, mono font  -->
+    <Style Selector="ListBox.consoleOutput">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Courier New" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!--  Console output item: accent dot on select/hover (WPF ListBoxItem template parity)  -->
+    <Style Selector="ListBox.consoleOutput ListBoxItem">
+        <Setter Property="Padding" Value="4,1" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="MinHeight" Value="18" />
+    </Style>
+
+    <Style Selector="ListBox.consoleOutput ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="ListBox.consoleOutput ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!--  Text styles  -->
+    <Style Selector="TextBlock.timestampText">
+        <Setter Property="Width" Value="85" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Setter Property="Foreground" Value="{StaticResource TimestampBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.kindLabelText">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style Selector="TextBlock.footerText">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{StaticResource TimestampBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.statusText">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+</Styles>

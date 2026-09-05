@@ -44,7 +44,6 @@ public sealed class ProcessExecutor : IProcessExecutor
             si.WorkingDirectory = session.WorkingDirectory;
         }
 
-        si.UseShellExecute = false;
         si.CreateNoWindow = true;
         si.RedirectStandardOutput = true;
         si.RedirectStandardError = true;

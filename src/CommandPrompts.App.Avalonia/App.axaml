@@ -1,0 +1,20 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CommandPrompts.App.Avalonia.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!--  WPF Theme.xaml palette port (dark console theme)  -->
+                <ResourceInclude Source="avares://CommandPrompts.App.Avalonia/Themes/AppTheme.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <!--  WPF Theme.xaml control-style port  -->
+        <StyleInclude Source="avares://CommandPrompts.App.Avalonia/Themes/AppStyles.axaml" />
+    </Application.Styles>
+</Application>

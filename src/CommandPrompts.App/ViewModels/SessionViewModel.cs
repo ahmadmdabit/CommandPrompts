@@ -277,7 +277,6 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
                 {
                     FileName = "explorer.exe",
                     Arguments = $"/select,\"{path}\"",
-                    UseShellExecute = true
                 });
             }
             else
@@ -287,7 +286,6 @@ public sealed class SessionViewModel : ObservableObject, IDisposable
                 {
                     FileName = "explorer.exe",
                     Arguments = dir,
-                    UseShellExecute = true
                 });
             }
         }
