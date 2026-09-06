@@ -1,9 +1,8 @@
 # CommandPrompts
 
-WPF/Avalonia desktop app (.NET 10, Windows) for managing and running multiple command-prompt sessions with persisted history. Three-project Clean Architecture solution (`CommandPrompts.slnx`):
+Avalonia desktop app (.NET 10, Windows) for managing and running multiple command-prompt sessions with persisted history. Two-project Clean Architecture solution (`CommandPrompts.slnx`; the legacy WPF project was removed):
 
 - `src/CommandPrompts.Core` — models, abstractions, services (platform-neutral)
-- `src/CommandPrompts.App` — WPF presentation (legacy, retained for reference)
 - `src/CommandPrompts.App.Avalonia` — Avalonia 12 presentation (active)
 - `tests/CommandPrompts.App.Avalonia.Tests` — headless NUnit tests
 
@@ -34,6 +33,9 @@ Uses `Avalonia.Headless.NUnit` with `PerTest` isolation. Tests must be `async Ta
 - JSON: source-generated serializer via `[JsonSerializable]` context in `Core/Json/AppJsonContext.cs`. Add new model types there, not ad-hoc reflection calls.
 - Performance requirements from `resources/Project-Requirements.md` apply to all changes: minimal allocation, thread-safe, fully async/non-blocking, reflection-free where possible.
 - Session history persists as JSON files in `%LOCALAPPDATA%\CommandPrompts\History` (one file per session, write-once temp file per save, atomic replace).
+- Output journal: one append-only `.journal` + `.journal.idx` per session, single cached writer owned by the repository — new readers must use the shared parser (`SessionJournal.ParseJournalLine`), never open a second `SessionJournal`; VMs release handles via `CloseJournal` on dispose.
+- Env profiles live in `%LOCALAPPDATA%\CommandPrompts\Profiles.json`; session VMs track profile vars and user vars separately and rebuild on change (switching profiles replaces, never accumulates).
+- ViewModels are `sealed`; collections bound to `ItemsControl` must implement non-generic `System.Collections.IList`.
 
 ## Avalonia-Specific Conventions
 
@@ -52,3 +54,6 @@ Uses `Avalonia.Headless.NUnit` with `PerTest` isolation. Tests must be `async Ta
 - ContextMenu bindings in popups require `#Root.DataContext.Property` (named Window) — `$parent` selectors resolve to null in popup overlays.
 - `DataTransfer` (Avalonia 12 clipboard API) must be disposed after use.
 - Headless tests use `TraceListener` + `LogToTrace` — framework logs go to test output, not app logs.
+- `FileMode.Append` forbids `SetLength(0)` — truncatable append streams need `OpenOrCreate` + `Seek(End)`.
+- Auto-scroll follow flags must be recalculated from current scroll position on every `ScrollChanged`, not gated on `ExtentDelta`.
+- Analyzer triage policy: DTO collection setters stay (STJ deserialization requires them — reject CA2227/CA1002); no blanket `ConfigureAwait(false)` in VM paths (UI-thread affinity); intentional general catches (process kill, temp cleanup) stay documented.
