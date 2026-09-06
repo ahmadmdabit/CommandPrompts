@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -12,6 +11,7 @@ public sealed class ProcessExecutor : IProcessExecutor
     public async Task<int> ExecuteAsync(
         Session session,
         Action<ProcessOutputLine> onOutput,
+        Action<TextWriter>? onStdinReady = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -47,6 +47,7 @@ public sealed class ProcessExecutor : IProcessExecutor
         si.CreateNoWindow = true;
         si.RedirectStandardOutput = true;
         si.RedirectStandardError = true;
+        si.RedirectStandardInput = true;
         si.StandardOutputEncoding = Encoding.UTF8;
         si.StandardErrorEncoding = Encoding.UTF8;
 
@@ -81,6 +82,7 @@ public sealed class ProcessExecutor : IProcessExecutor
                 return -1;
             }
 
+            onStdinReady?.Invoke(process.StandardInput);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
@@ -92,22 +94,33 @@ public sealed class ProcessExecutor : IProcessExecutor
                     {
                         process.Kill(entireProcessTree: true);
                         onOutput(new ProcessOutputLine(OutputKind.System, "Process terminated by user."));
+                        System.Diagnostics.Trace.TraceInformation(
+                            $"Process terminated by user: {session.Command} {session.Arguments}");
                     }
                 }
-                catch (Exception ex) when (ex is InvalidOperationException or Win32Exception)
+                catch (Exception ex)
                 {
+                    // Kill must never escape: a failed kill would otherwise leave
+                    // the exit wait below pending forever (stuck "Terminating...").
                     onOutput(new ProcessOutputLine(
                         OutputKind.System,
                         $"Unable to terminate process: {ex.Message}"));
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"Process kill failed ({session.Command} {session.Arguments}): {ex}");
                 }
             });
 
-            await tcsExit.Task.ConfigureAwait(false);
+            // Cancellation-linked wait: if the process survives the kill above
+            // (Exited never fires), the wait still unwinds via ct instead of
+            // hanging forever.
+            await tcsExit.Task.WaitAsync(ct).ConfigureAwait(false);
 
             // Ensure async output handlers flush before returning the final exit code.
+            // Async form: the process has exited by now (Exited fired), so this
+            // completes immediately without blocking a thread-pool thread.
             try
             {
-                process.WaitForExit();
+                await process.WaitForExitAsync(ct).ConfigureAwait(false);
             }
             catch (InvalidOperationException)
             {

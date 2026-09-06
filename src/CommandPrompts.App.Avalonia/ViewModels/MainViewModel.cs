@@ -15,6 +15,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly IProcessExecutor executor;
     private readonly ISessionRepository repository;
+    private readonly EnvProfileService profileService;
     private Services.IDialogService? dialogService;
     private bool hasLoaded;
 
@@ -36,9 +37,14 @@ public partial class MainViewModel : ObservableObject
     {
         executor = new ProcessExecutor();
         repository = new SessionRepository();
+        var profilesPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CommandPrompts", "Profiles.json");
+        profileService = new EnvProfileService(profilesPath);
 
         NewSessionCommand = new AsyncRelayCommand(CreateNewSessionAsync);
         DeleteSessionCommand = new AsyncRelayCommand(DeleteSelectedSessionAsync, CanDeleteSession);
+        ManageProfilesCommand = new AsyncRelayCommand(ManageProfilesAsync);
         LoadedCommand = new AsyncRelayCommand(LoadSessionsAsync);
         SelectSessionCommand = new RelayCommand<SessionViewModel>(SelectSession);
     }
@@ -63,6 +69,7 @@ public partial class MainViewModel : ObservableObject
 
     public IAsyncRelayCommand NewSessionCommand { get; }
     public IAsyncRelayCommand DeleteSessionCommand { get; }
+    public IAsyncRelayCommand ManageProfilesCommand { get; }
     public IAsyncRelayCommand LoadedCommand { get; }
     public IRelayCommand<SessionViewModel> SelectSessionCommand { get; }
 
@@ -92,6 +99,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var sessions = await repository.LoadAllAsync();
+            await profileService.LoadAllAsync();
 
             // Apply results on the UI thread: the await continuation may resume on a
             // worker thread, and ObservableCollection mutation + SelectedSession must
@@ -100,7 +108,11 @@ public partial class MainViewModel : ObservableObject
             {
                 Sessions.Clear();
                 foreach (var s in sessions)
-                    Sessions.Add(new SessionViewModel(s, executor, repository));
+                {
+                    var vm = new SessionViewModel(s, executor, repository);
+                    vm.AttachProfiles(profileService);
+                    Sessions.Add(vm);
+                }
 
                 if (Sessions.Count > 0)
                     SelectedSession = Sessions[0];
@@ -131,6 +143,7 @@ public partial class MainViewModel : ObservableObject
         };
 
         var vm = new SessionViewModel(session, executor, repository);
+        vm.AttachProfiles(profileService);
         if (dialogService is not null)
             vm.AttachServices(dialogService, null!);
 
@@ -158,5 +171,21 @@ public partial class MainViewModel : ObservableObject
         Sessions.Remove(session);
 
         SelectedSession = Sessions.Count > 0 ? Sessions[0] : null;
+    }
+
+    private async Task ManageProfilesAsync()
+    {
+        if (dialogService is null)
+            return;
+
+        await dialogService.ManageProfilesAsync(profileService);
+
+        // Push the refreshed list into every session; sessions whose profile
+        // was deleted fall back to user-only vars (RefreshProfiles).
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            foreach (var s in Sessions)
+                s.RefreshProfiles();
+        });
     }
 }

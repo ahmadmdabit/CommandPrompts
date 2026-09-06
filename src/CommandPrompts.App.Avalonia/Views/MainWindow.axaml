@@ -21,6 +21,8 @@
                     <TextBlock Text="Delete" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
+            <Button Content="Profiles" Command="{Binding ManageProfilesCommand}"
+                    ToolTip.Tip="Create, edit and delete shared env profiles" />
         </StackPanel>
 
         <!-- Session buttons (WrapPanel, max 3 rows, vertical scroll) -->

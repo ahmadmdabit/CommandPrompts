@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 using CommandPrompts.Core.Abstractions;
@@ -11,6 +12,8 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
     private readonly string historyDir;
     private const string AppDataSubfolder = "CommandPrompts";
     private readonly object ioLock = new();
+    private readonly object journalLock = new();
+    private readonly Dictionary<Guid, SessionJournal> journals = new();
     private bool disposed;
 
     public SessionRepository()
@@ -23,6 +26,9 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
     public string GetSessionFilePath(Guid sessionId)
         => Path.Combine(historyDir, $"{sessionId:N}.json");
 
+    public string GetJournalFilePath(Guid sessionId)
+        => Path.Combine(historyDir, $"{sessionId:N}.journal");
+
     public async Task<IReadOnlyList<Session>> LoadAllAsync(CancellationToken ct = default)
     {
         var files = Directory.GetFiles(historyDir, "*.json");
@@ -31,7 +37,6 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
 
         var sessions = new List<Session>(files.Length);
 
-        // Parallel deserialize for large histories
         var tasks = new Task<Session?>[files.Length];
         for (var i = 0; i < files.Length; i++)
         {
@@ -55,9 +60,6 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
     {
         var path = GetSessionFilePath(session.Id);
 
-        // Serialize to a unique temp file in the same dir (same volume => atomic move),
-        // then move into place atomically under the ioLock so concurrent saves on the
-        // same session file don't collide on a shared .tmp path.
         var tempPath = Path.Combine(historyDir, $"{session.Id:N}.{Guid.NewGuid():N}.tmp");
 
         lock (ioLock)
@@ -74,7 +76,6 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
                         AppJsonContext.Default.Session);
                 }
 
-                // Atomic replace
                 File.Move(tempPath, path, overwrite: true);
             }
             finally
@@ -84,8 +85,80 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
         }
     }
 
+    public Task AppendOutputAsync(Guid sessionId, OutputEntry entry, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        GetJournal(sessionId).AppendLine(entry);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Shared append-only journal for a session (single writer).</summary>
+    public SessionJournal GetJournal(Guid sessionId)
+    {
+        lock (journalLock)
+        {
+            if (!journals.TryGetValue(sessionId, out var journal))
+            {
+                var path = GetJournalFilePath(sessionId);
+                journal = new SessionJournal(path);
+                journals[sessionId] = journal;
+            }
+            return journal;
+        }
+    }
+
+    /// <summary>Closes the cached journal for a session, releasing its file handles.
+    /// Call when a session VM is deactivated or a tab is closed (C2).</summary>
+    public void CloseJournal(Guid sessionId)
+    {
+        lock (journalLock)
+        {
+            if (journals.TryGetValue(sessionId, out var journal))
+            {
+                journal.Dispose();
+                journals.Remove(sessionId);
+            }
+        }
+    }
+
+    public async Task<IReadOnlyList<OutputEntry>> ReadOutputAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        // Read directly from the file — do NOT create a second SessionJournal
+        // instance. The cached journal owns the write handle + offset index;
+        // a second instance would open a competing write-capable handle and
+        // break the single-writer invariant (C1).
+        var path = GetJournalFilePath(sessionId);
+        if (!File.Exists(path))
+            return [];
+
+        var entries = new List<OutputEntry>();
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete, bufferSize: 4096, useAsync: true);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct).ConfigureAwait(false)) != null)
+        {
+            ct.ThrowIfCancellationRequested();
+            // Shared salvage parser: a fused line yields each healthy entry
+            // instead of discarding the whole line (or throwing).
+            entries.AddRange(SessionJournal.ParseJournalLine(line));
+        }
+        return entries;
+    }
+
     public async Task DeleteAsync(Guid sessionId, CancellationToken ct = default)
     {
+        // Dispose the cached journal FIRST: its writer/index handles keep the
+        // files open, and File.Delete throws sharing-violation while held.
+        lock (journalLock)
+        {
+            if (journals.TryGetValue(sessionId, out var journal))
+            {
+                journal.Dispose();
+                journals.Remove(sessionId);
+            }
+        }
+
         var path = GetSessionFilePath(sessionId);
 
         lock (ioLock)
@@ -96,6 +169,14 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
             if (File.Exists(path))
                 File.Delete(path);
         }
+
+        var journalPath = GetJournalFilePath(sessionId);
+        if (File.Exists(journalPath))
+            File.Delete(journalPath);
+
+        var indexPath = journalPath + ".idx";
+        if (File.Exists(indexPath))
+            File.Delete(indexPath);
 
         await Task.CompletedTask;
     }
@@ -111,7 +192,7 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
         }
         catch (JsonException)
         {
-            return null; // corrupted file — skip
+            return null;
         }
         catch (IOException)
         {
@@ -139,6 +220,12 @@ public sealed class SessionRepository : ISessionRepository, IDisposable
         lock (ioLock)
         {
             disposed = true;
+        }
+        lock (journalLock)
+        {
+            foreach (var journal in journals.Values)
+                journal.Dispose();
+            journals.Clear();
         }
     }
 }

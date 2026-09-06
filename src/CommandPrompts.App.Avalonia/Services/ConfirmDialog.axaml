@@ -2,9 +2,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CommandPrompts.App.Avalonia.Services.ConfirmDialog"
         Title="Confirm"
-        Width="420" Height="180"
+        Icon="/Assets/CommandPrompts.App.ico"
+        Background="{StaticResource BackgroundBrush}"
+        Width="300" 
+        Height="120"
         WindowStartupLocation="CenterOwner"
-        CanResize="False"
         ShowInTaskbar="False">
 
     <Grid RowDefinitions="*,Auto" Margin="20" RowSpacing="16">
@@ -17,12 +19,12 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8">
-            <Button x:Name="CancelButton"
-                    Content="Cancel"
-                    IsCancel="True" />
             <Button x:Name="OkButton"
                     Content="OK"
                     IsDefault="True" />
+            <Button x:Name="CancelButton"
+                    Content="Cancel"
+                    IsCancel="True" />
         </StackPanel>
     </Grid>
 </Window>

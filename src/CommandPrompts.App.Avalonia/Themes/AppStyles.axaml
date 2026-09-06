@@ -128,6 +128,11 @@
         <Setter Property="Foreground" Value="{StaticResource TimestampBrush}" />
     </Style>
 
+    <Style Selector="SelectableTextBlock.footerText">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{StaticResource TimestampBrush}" />
+    </Style>
+
     <Style Selector="TextBlock.statusText">
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="VerticalAlignment" Value="Center" />

@@ -8,6 +8,7 @@ public sealed class Session
     public string Arguments { get; set; } = string.Empty;
     public string WorkingDirectory { get; set; } = string.Empty;
     public List<EnvironmentVariable> EnvironmentVariables { get; set; } = [];
+    public string? EnvProfileName { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastRunAt { get; set; }
     public List<ExecutionRecord> ExecutionHistory { get; set; } = [];

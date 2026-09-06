@@ -51,14 +51,15 @@ public partial class SessionView : UserControl
 
     // Auto-scroll: follow new lines only while the user is already at (or near) the
     // bottom — scrolling up to read history must not be fought by the app.
+    // Always recalculate from the current scroll position so scrolling back down
+    // re-enables auto-scroll (the flag is otherwise sticky-disabled forever).
     private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (e.ExtentDelta.Y == 0)
+        var sb = OutputListBox.Scroll;
+        if (sb is null)
             return;
 
-        var sb = OutputListBox.Scroll;
-        userScrolledAway = sb is not null
-            && sb.Offset.Y + sb.Viewport.Height < sb.Extent.Height - 40;
+        userScrolledAway = sb.Offset.Y + sb.Viewport.Height < sb.Extent.Height - 40;
     }
 
     private void OnOutputCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

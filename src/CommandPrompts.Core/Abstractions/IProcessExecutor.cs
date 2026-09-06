@@ -9,5 +9,6 @@ public interface IProcessExecutor
     Task<int> ExecuteAsync(
         Session session,
         Action<ProcessOutputLine> onOutput,
+        Action<TextWriter>? onStdinReady = null,
         CancellationToken ct = default);
 }

@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.NUnit;
 using Avalonia.Threading;
 
@@ -13,7 +14,7 @@ namespace CommandPrompts.App.Avalonia.Tests;
 public class ViewInstantiationTests
 {
     [AvaloniaTest]
-    public void MainWindow_Instantiates_And_Binds_Without_Crash()
+    public void MainWindowInstantiatesAndBindsWithoutFailure()
     {
         var window = new MainWindow();
         window.Show();
@@ -30,7 +31,7 @@ public class ViewInstantiationTests
     }
 
     [AvaloniaTest]
-    public void SessionView_Measure_Arrange_Forces_Bindings_Without_Cast_Errors()
+    public async Task SessionViewMeasureArrangeForcesBindingsWithoutCastErrors()
     {
         var session = new CommandPrompts.Core.Models.Session { Name = "HeadlessTest" };
         var executor = new CommandPrompts.Core.Services.ProcessExecutor();
@@ -39,15 +40,56 @@ public class ViewInstantiationTests
         var vm = new SessionViewModel(session, executor, repository);
 
         var view = new SessionView { DataContext = vm };
+        var window = new Window { Content = view };
+        window.Show();
+
         view.Measure(new Size(800, 600));
         view.Arrange(new Rect(0, 0, 800, 600));
 
+        // Pump the dispatcher until the ItemsSource binding resolves
+        // (fact 714: single InvokeAsync/RunJobs is insufficient — await real
+        // dispatcher round-trips with a deadline, per SessionPersistenceTests).
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (view.OutputListBox.ItemsSource is null && DateTime.UtcNow < deadline)
+            await Dispatcher.UIThread.InvokeAsync(() => { });
+
         Assert.That(view.OutputListBox, Is.Not.Null);
         Assert.That(view.OutputListBox.ItemsSource, Is.SameAs(vm.OutputLines));
+
+        window.Close();
+        await Task.CompletedTask;
     }
 
     [AvaloniaTest]
-    public async Task SessionViewModel_Replays_Persisted_ExecutionHistory_Into_OutputLines()
+    public async Task ProfileEditorDialogMeasureArrangeBindsWithoutErrors()
+    {
+        var service = new CommandPrompts.Core.Services.EnvProfileService(
+            Path.Combine(Path.GetTempPath(), "CPProfileDlg" + Guid.NewGuid() + ".json"));
+        await service.SaveAsync(new EnvProfile
+        {
+            Name = "Dlg",
+            Variables = new() { ["K"] = "v" }
+        });
+
+        var vm = new ProfileEditorViewModel(service);
+        var dialog = new Services.ProfileEditorDialog(vm);
+        dialog.Show();
+
+        dialog.Measure(new Size(640, 420));
+        dialog.Arrange(new Rect(0, 0, 640, 420));
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (dialog.DataContext is null && DateTime.UtcNow < deadline)
+            await Dispatcher.UIThread.InvokeAsync(() => { });
+
+        Assert.That(dialog.DataContext, Is.SameAs(vm));
+
+        dialog.Close();
+        await Task.CompletedTask;
+    }
+
+    [AvaloniaTest]
+    public async Task SessionViewModelReplaysPersistedExecutionHistoryIntoOutputLines()
     {
         // WPF-parity regression: output history must survive restart. A session
         // loaded from disk carries ExecutionHistory records; the VM constructor
@@ -93,7 +135,42 @@ public class ViewInstantiationTests
     }
 
     [AvaloniaTest]
-    public async Task RunAsync_Executes_Echo_And_Captures_ExitCode()
+    public async Task TerminateLongRunningReturnsToIdleWithTerminatedStatus()
+    {
+        var session = new CommandPrompts.Core.Models.Session
+        {
+            Name = "TerminateTest",
+            Command = "cmd.exe",
+            Arguments = "/c ping -t 127.0.0.1"
+        };
+
+        var executor = new CommandPrompts.Core.Services.ProcessExecutor();
+        using var repository = new CommandPrompts.Core.Services.SessionRepository();
+        var vm = new SessionViewModel(session, executor, repository);
+
+        vm.RunCommand.Execute(null);
+
+        // Wait until running (deadline-pumped, headless-NUnit style).
+        var startDeadline = DateTime.UtcNow.AddSeconds(10);
+        while (!vm.IsRunning && DateTime.UtcNow < startDeadline)
+            Dispatcher.UIThread.RunJobs();
+        Assert.That(vm.IsRunning, Is.True, "Process must be running before terminate");
+
+        vm.TerminateCommand.Execute(null);
+
+        // Must unwind to Idle even if the process tree resists the kill —
+        // the wait is cancellation-linked, never stuck at "Terminating...".
+        var stopDeadline = DateTime.UtcNow.AddSeconds(15);
+        while (vm.RunState != SessionRunState.Idle && DateTime.UtcNow < stopDeadline)
+            Dispatcher.UIThread.RunJobs();
+
+        Assert.That(vm.RunState, Is.EqualTo(SessionRunState.Idle));
+        Assert.That(vm.StatusText, Is.EqualTo("Terminated"));
+        await Task.CompletedTask;
+    }
+
+    [AvaloniaTest]
+    public async Task RunAsyncExecutesEchoAndCapturesExitCode()
     {
         var session = new CommandPrompts.Core.Models.Session
         {

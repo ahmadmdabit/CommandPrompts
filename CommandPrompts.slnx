@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CommandPrompts.App.Avalonia/CommandPrompts.App.Avalonia.csproj" />
-    <Project Path="src/CommandPrompts.App/CommandPrompts.App.csproj" />
     <Project Path="src/CommandPrompts.Core/CommandPrompts.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">

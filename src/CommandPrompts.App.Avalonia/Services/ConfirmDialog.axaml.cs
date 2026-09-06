@@ -4,6 +4,10 @@ namespace CommandPrompts.App.Avalonia.Services;
 
 public partial class ConfirmDialog : Window
 {
+    public ConfirmDialog() : this("Confirm", "", true)
+    {
+    }
+
     public ConfirmDialog(string title, string message, bool cancelVisible = true)
     {
         InitializeComponent();

@@ -40,7 +40,7 @@ public class SessionPersistenceTests
     }
 
     [AvaloniaTest]
-    public async Task LoadSessionsAsync_Populates_Sessions_From_Disk()
+    public async Task LoadSessionsAsyncPopulatesSessionsFromDisk()
     {
         var expectedFiles = RealHistoryFileCount();
 
@@ -65,7 +65,7 @@ public class SessionPersistenceTests
     }
 
     [AvaloniaTest]
-    public async Task LoadSessionsAsync_Is_Idempotent_NoDuplicates()
+    public async Task LoadSessionsAsyncIsIdempotentNoDuplicates()
     {
         var vm = new MainViewModel();
 
@@ -82,7 +82,7 @@ public class SessionPersistenceTests
     }
 
     [AvaloniaTest]
-    public async Task MainWindow_OnOpened_Loads_Persisted_Sessions()
+    public async Task MainWindowOnOpenedLoadsPersistedSessions()
     {
         var expectedFiles = RealHistoryFileCount();
 
