@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CommandPrompts.App.Avalonia.ViewModels"
+        xmlns:converters="using:Avalonia.Data.Converters"
         x:Class="CommandPrompts.App.Avalonia.Services.ProfileEditorDialog"
         x:DataType="vm:ProfileEditorViewModel"
         Title="Manage Env Profiles"
@@ -17,31 +18,24 @@
             <Grid RowDefinitions="Auto,*" Grid.Column="0">
                 <TextBlock Grid.Row="0" Text="Profiles" FontWeight="SemiBold"
                            Foreground="{StaticResource ForegroundBrush}" Margin="0,0,0,6" />
-                <Border Grid.Row="1" CornerRadius="6" ClipToBounds="True"
-                        Background="{StaticResource GroupBrush}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-                    <ListBox ItemsSource="{Binding Profiles}"
-                             SelectedItem="{Binding SelectedProfile}"
-                             DisplayMemberBinding="{Binding Name}" />
-                </Border>
+                <ListBox Grid.Row="1" Classes.rounded="true" 
+                    ItemsSource="{Binding Profiles}"
+                    SelectedItem="{Binding SelectedProfile}"
+                    DisplayMemberBinding="{Binding Name}" />
             </Grid>
 
             <!-- Editor -->
             <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*,Auto">
                 <TextBlock Grid.Row="0" Text="Name:" Margin="0,0,0,6"
                            Foreground="{StaticResource ForegroundBrush}" />
-                <Border Grid.Row="1" Margin="0,0,0,6" Classes.roundedTextBoxBorder="True">
-                    <TextBox Classes.rounded="True" Text="{Binding EditName}" />
-                </Border>
-                <TextBlock Grid.Row="2" Text="Variables (one per line: KEY=VALUE):" Margin="0,0,0,6"
-                           Foreground="{StaticResource ForegroundBrush}" />
-                <Border Grid.Row="3" Classes.roundedTextBoxBorder="True">
-                    <TextBox Classes.rounded="True" AcceptsReturn="True"
-                             Text="{Binding EditVariablesText}" VerticalAlignment="Stretch"
-                             ToolTip.Tip="One per line: KEY=VALUE" />
-                </Border>
-                <TextBlock Grid.Row="4" Text="{Binding ErrorMessage}"
-                           Foreground="{StaticResource ErrorColor}" Margin="0,6,0,0" />
+                <TextBox Grid.Row="1" Margin="0,0,0,6" Classes.rounded="True" Text="{Binding EditName}" />
+                <TextBlock Grid.Row="2" Text="Variables (one per line: KEY=VALUE):" Margin="0,0,0,6" Foreground="{StaticResource ForegroundBrush}" />
+                <TextBox Grid.Row="3" Classes.rounded="True" AcceptsReturn="True"
+                    Text="{Binding EditVariablesText}" VerticalAlignment="Stretch"
+                    ToolTip.Tip="One per line: KEY=VALUE" />
+                <TextBlock Grid.Row="4" Margin="0,6,0,0" Text="{Binding ErrorMessage}"
+                    Foreground="{StaticResource ErrorColor}"
+                    IsVisible="{Binding ErrorMessage, Converter={x:Static converters:StringConverters.IsNotNullOrEmpty}}" />
             </Grid>
         </Grid>
 

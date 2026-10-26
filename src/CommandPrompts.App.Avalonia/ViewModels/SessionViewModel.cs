@@ -66,7 +66,8 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
     private string command = "cmd.exe";
 
     [ObservableProperty]
-    private string arguments = "/c echo Hello World";
+    // One argument per line (multi-line box); BuildArguments joins them for the process.
+    private string arguments = string.Join(Environment.NewLine, "/c", "echo Hello World");
 
     [ObservableProperty]
     private string workingDirectory = string.Empty;
@@ -88,6 +89,8 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
 
     partial void OnNameChanged(string value) { Session.Name = value; QueueSave(); }
     partial void OnCommandChanged(string value) { Session.Command = value; QueueSave(); }
+    // H2: store the raw user input; normalization happens at consumption time
+    // (BuildArguments/GetProcessArguments), not on every keystroke.
     partial void OnArgumentsChanged(string value) { Session.Arguments = value; QueueSave(); }
     partial void OnWorkingDirectoryChanged(string value) { Session.WorkingDirectory = value; QueueSave(); }
     partial void OnEnvironmentVariablesTextChanged(string value)
@@ -210,6 +213,7 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
         CopySelectedCommand = new AsyncRelayCommand(CopySelectedOutputAsync, HasSelection);
         CopySelectedOrAllCommand = new AsyncRelayCommand(CopySelectedOrAllAsync);
         SubmitInputCommand = new RelayCommand(SubmitInput, () => !string.IsNullOrEmpty(InputText));
+        ClearSelectionCommand = new RelayCommand(ClearSelection);
 
         outputBuffer = new DiskBackedOutputBuffer(repository.GetJournal(Id));
         OutputLines = outputBuffer;
@@ -281,7 +285,7 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
     private readonly bool warmStartedFromHistory;
 
     /// <summary>
-    /// Currently selected output lines (multi-select; right-click and Ctrl+click
+    /// Currently selected output lines (multi-select; right-click and Ctrl+Shift+click
     /// update it before the context menu / key gesture fires).
     /// </summary>
     [ObservableProperty]
@@ -317,6 +321,7 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand CopySelectedCommand { get; }
     public IAsyncRelayCommand CopySelectedOrAllCommand { get; }
     public IRelayCommand SubmitInputCommand { get; }
+    public IRelayCommand ClearSelectionCommand { get; }
 
     private async Task RunAsync()
     {
@@ -334,7 +339,7 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
         Session.LastRunAt = execution.StartedAt;
 
         AddExecutionOutput(execution, OutputKind.System,
-            $">> Starting: {Session.Command} {Session.Arguments}");
+            $">> Starting: {Session.Command} {Session.BuildArguments()}");
 
         var terminatedByUser = false;
         try
@@ -434,6 +439,8 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
         outputBuffer?.Clear();
     }
 
+    private void ClearSelection() => SelectedOutputLines.Clear();
+
     private void OpenSessionFolder()
     {
         var path = repository.GetSessionFilePath(Session.Id);
@@ -481,7 +488,28 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
         });
     }
 
-    private void QueueSave() => _ = repository.SaveAsync(Session);
+    private Timer? saveDebounceTimer;
+
+    private void QueueSave()
+    {
+        // Coalesce rapid saves (e.g. keystrokes in the multi-line Arguments box)
+        // into a single write 300 ms after the last change (H6).
+        saveDebounceTimer?.Dispose();
+        saveDebounceTimer = new Timer(SaveTimerElapsed, this, 300, Timeout.Infinite);
+    }
+
+    private static async void SaveTimerElapsed(object? state)
+    {
+        var vm = (SessionViewModel)state!;
+        try
+        {
+            await vm.repository.SaveAsync(vm.Session).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Debounced session save failed: {ex.Message}");
+        }
+    }
 
     private async Task CopyAllOutputAsync()
     {
@@ -505,7 +533,7 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
         await CopyToClipboardAsync(FormatLines(SelectedOutputLines));
     }
 
-    /// <summary>Ctrl+C behavior: selected lines when a selection exists, otherwise the full output.</summary>
+    /// <summary>Ctrl+Shift+C behavior: selected lines when a selection exists, otherwise the full output.</summary>
     private async Task CopySelectedOrAllAsync()
         => await (HasSelection() ? CopySelectedOutputAsync() : CopyAllOutputAsync());
 
@@ -607,6 +635,7 @@ public sealed partial class SessionViewModel : ObservableObject, IDisposable
         // access if the session is reactivated.
         repository.CloseJournal(Id);
 
+        saveDebounceTimer?.Dispose();
         outputBuffer?.Dispose();
     }
 }

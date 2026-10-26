@@ -28,7 +28,8 @@ public sealed class ProcessExecutor : IProcessExecutor
         var si = process.StartInfo;
 
         si.FileName = session.Command;
-        si.Arguments = session.Arguments;
+        foreach (var arg in session.GetProcessArguments())
+            si.ArgumentList.Add(arg);
 
         if (!string.IsNullOrWhiteSpace(session.WorkingDirectory))
         {
@@ -95,7 +96,7 @@ public sealed class ProcessExecutor : IProcessExecutor
                         process.Kill(entireProcessTree: true);
                         onOutput(new ProcessOutputLine(OutputKind.System, "Process terminated by user."));
                         System.Diagnostics.Trace.TraceInformation(
-                            $"Process terminated by user: {session.Command} {session.Arguments}");
+                            $"Process terminated by user: {session.Command} {session.BuildArguments()}");
                     }
                 }
                 catch (Exception ex)
@@ -106,7 +107,7 @@ public sealed class ProcessExecutor : IProcessExecutor
                         OutputKind.System,
                         $"Unable to terminate process: {ex.Message}"));
                     System.Diagnostics.Trace.TraceWarning(
-                        $"Process kill failed ({session.Command} {session.Arguments}): {ex}");
+                        $"Process kill failed ({session.Command} {session.BuildArguments()}): {ex}");
                 }
             });
 

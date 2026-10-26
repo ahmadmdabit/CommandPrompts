@@ -42,13 +42,13 @@ public class ProfileEditorTests
         var vm = new ProfileEditorViewModel(service, new ConfirmingDialogs());
 
         vm.EditName = "Dev";
-        vm.EditVariablesText = "API_URL=http://localhost:5000" + Environment.NewLine + "DEBUG=true";
+        vm.EditVariablesText = "APIURL=http://localhost:5000" + Environment.NewLine + "DEBUG=true";
         await vm.SaveCommand.ExecuteAsync(null);
 
         Assert.That(vm.ErrorMessage, Is.Empty);
         var profiles = await service.LoadAllAsync();
         Assert.That(profiles, Has.Count.EqualTo(1));
-        Assert.That(profiles[0].Variables["API_URL"], Is.EqualTo("http://localhost:5000"));
+        Assert.That(profiles[0].Variables["APIURL"], Is.EqualTo("http://localhost:5000"));
     }
 
     [Test]
@@ -99,7 +99,7 @@ public class ProfileEditorTests
         await service.SaveAsync(new EnvProfile
         {
             Name = "Gone",
-            Variables = new() { ["FROM_PROFILE"] = "p" }
+            Variables = new() { ["FROMPROFILE"] = "p" }
         });
 
         var session = new Session { Name = "Fallback" };
@@ -115,6 +115,6 @@ public class ProfileEditorTests
         vm.RefreshProfiles();
 
         Assert.That(vm.EnvironmentVariablesText, Does.Contain("MINE=1"));
-        Assert.That(vm.EnvironmentVariablesText, Does.Not.Contain("FROM_PROFILE"));
+        Assert.That(vm.EnvironmentVariablesText, Does.Not.Contain("FROMPROFILE"));
     }
 }

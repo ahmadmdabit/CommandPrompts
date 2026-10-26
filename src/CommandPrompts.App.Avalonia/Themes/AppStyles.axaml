@@ -1,7 +1,33 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- Disable the built‑in auto‑hide so it doesn't override our opacity rules -->
+    <Style Selector="ScrollViewer">
+        <Setter Property="AllowAutoHide" Value="False" />
+    </Style>
+
+    <!-- Hide every scrollbar by default, but keep it hit‑testable -->
+    <Style Selector="ScrollBar">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Show the scrollbar only when the pointer is directly over it -->
+    <Style Selector="ScrollBar:pointerover">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
+
+
     <!--  Control styles ported from WPF Theme.xaml (triggers → Avalonia pseudo-class selectors)  -->
+
+    <Style Selector="ComboBox">
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
 
     <!--  Implicit Button style: accent fill, rounded, hover dim  -->
     <Style Selector="Button">
@@ -48,7 +74,7 @@
     <!--  Session item button (used by WrapPanel in MainWindow)  -->
     <Style Selector="Button.sessionItem">
         <Setter Property="Padding" Value="8,4" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="FontSize" Value="12" />
     </Style>
@@ -73,9 +99,10 @@
     <!--  Rounded borderless TextBox inside a styled Border (RoundedTextBoxStyle)  -->
     <Style Selector="TextBox.rounded">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Margin" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
     </Style>
 
     <Style Selector="Border.roundedTextBoxBorder">
@@ -86,12 +113,31 @@
         <Setter Property="CornerRadius" Value="6" />
     </Style>
 
+    <Style Selector="ListBox.rounded">
+       <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+
+    <Style Selector="ListBox.rounded:pointerover">
+        <Setter Property="BorderBrush" Value="{StaticResource ForegroundBrush}" />
+        <Setter Property="Background" Value="{StaticResource ConsoleBackgroundColor}" />
+    </Style>
+
     <!--  Console output ListBox: transparent over the console background, mono font  -->
     <Style Selector="ListBox.consoleOutput">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="{StaticResource ConsoleBackgroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
         <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Courier New" />
         <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style Selector="ListBox.consoleOutput:pointerover">
+        <Setter Property="BorderBrush" Value="{StaticResource ForegroundBrush}" />
     </Style>
 
     <!--  Console output item: accent dot on select/hover (WPF ListBoxItem template parity)  -->
@@ -108,6 +154,25 @@
 
     <Style Selector="ListBox.consoleOutput ListBoxItem:pointerover /template/ ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    
+    <Style Selector="SelectableTextBlock.listBoxItemText">
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+    <Style Selector="ListBoxItem:selected SelectableTextBlock.listBoxItemText, ListBoxItem:pointerover SelectableTextBlock.listBoxItemText">
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style Selector="TextBlock.listBoxItemBullet">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ListBoxItem:selected TextBlock.listBoxItemBullet">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover TextBlock.listBoxItemBullet">
+        <Setter Property="Opacity" Value="1" />
     </Style>
 
     <!--  Text styles  -->

@@ -30,13 +30,13 @@ public class EnvProfileTests
         await service.SaveAsync(new EnvProfile
         {
             Name = "Production",
-            Variables = new() { ["API_KEY"] = "prod-key", ["DEBUG"] = "false" }
+            Variables = new() { ["APIKEY"] = "prod-key", ["DEBUG"] = "false" }
         });
 
         var sessionOverrides = new Dictionary<string, string> { ["DEBUG"] = "true" };
         var effective = service.GetEffectiveVars("Production", sessionOverrides);
 
-        Assert.That(effective["API_KEY"], Is.EqualTo("prod-key"));
+        Assert.That(effective["APIKEY"], Is.EqualTo("prod-key"));
         Assert.That(effective["DEBUG"], Is.EqualTo("true"), "Session override must win");
     }
 

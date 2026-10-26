@@ -23,7 +23,7 @@ No UI framework dependency (`net10.0`, `IsAotCompatible=true`):
 - `Abstractions/` — `IProcessExecutor`, `ISessionRepository`. The App layer depends only on these interfaces.
 - `Models/` — `Session`, `ExecutionRecord`, `OutputEntry`, `EnvironmentVariable`, `EnvProfile`.
 - `Services/` — implementations:
-  - `ProcessExecutor` — async process lifecycle via `TaskCompletionSource` + event-based exit; returns the real process `ExitCode`, validates command/working-directory before start, redirects stdin (via `onStdinReady` callback), kills with a broad catch so termination can never escape, waits via cancellation-linked `WaitAsync(ct)` plus `WaitForExitAsync` for output flush.
+  - `ProcessExecutor` — async process lifecycle via `TaskCompletionSource` + event-based exit; returns the real process `ExitCode`, validates command/working-directory before start, redirects stdin (via `onStdinReady` callback), kills with a broad catch so termination can never escape, waits via cancellation-linked `WaitAsync(ct)` plus `WaitForExitAsync` for output flush; feeds per-argument values through `ProcessStartInfo.ArgumentList` so multi-line session arguments (one per line; quoted lines stay whole) escape correctly.
   - `SessionRepository` — file-per-session JSON persistence under `%LOCALAPPDATA%\CommandPrompts\History`; each save writes a uniquely-named temp file and holds the `ioLock` across serialize+write+move for atomic, collision-free replacement; owns one cached `SessionJournal` per session (single writer) with `CloseJournal` for handle release; dispose-first ordering in `DeleteAsync`; implements `IDisposable`; skips corrupt JSON files at load time.
   - `SessionJournal` — crash-safe append-only newline-delimited JSON output log with a line-offset index for O(1) random access; opened `OpenOrCreate` + seek-to-end (Append mode forbids truncation); shared `ParseJournalLine` salvage parser recovers healthy entries from fused/corrupt lines.
   - `EnvProfileService` — named env-var profiles in `%LOCALAPPDATA%\CommandPrompts\Profiles.json` (atomic temp+move writes); `GetEffectiveVars` merges profile base with session overrides (session wins).
@@ -35,7 +35,7 @@ Dependency direction is strictly one-way: App → Core abstractions → implemen
 
 The active UI layer, using **Avalonia 12** with `CommunityToolkit.Mvvm` source generation:
 
-- **ViewModels** — `MainViewModel` (session lifecycle, Dispatcher marshaling for UI-thread collection updates, profile editor entry point), `SessionViewModel` (run/terminate with explicit `Terminated` status/clear/copy/multi-select, stdin submit with password masking, profile/user var split with deleted-profile fallback), `ProfileEditorViewModel` (dispatcher-free profile CRUD + name validation), `DiskBackedOutputBuffer` (virtualized disk-backed output with sliding memory window; implements non-generic `IList` for ItemsControl binding), `OutputLineViewModel` (immutable, color-coded console output).
+- **ViewModels** — `MainViewModel` (session lifecycle, Dispatcher marshaling for UI-thread collection updates, profile editor entry point), `SessionViewModel` (run/terminate with explicit `Terminated` status/clear/copy/multi-select, Esc-to-clear selection, multi-line Arguments editing one per line with quoted lines preserved, stdin submit with password masking, profile/user var split with deleted-profile fallback), `ProfileEditorViewModel` (dispatcher-free profile CRUD + name validation), `DiskBackedOutputBuffer` (virtualized disk-backed output with sliding memory window; implements non-generic `IList` for ItemsControl binding), `OutputLineViewModel` (immutable, color-coded console output).
 - **Views** — `MainWindow` (toolbar + horizontal WrapPanel session strip + detail panel), `SessionView` (config panel + virtualized console output with bottom-follow auto-scroll + input panel), `ConfirmDialog`, `ProfileEditorDialog` (profile list + name/vars editor).
 - **Services** — `IDialogService`, `IClipboardService` (Avalonia 12 `DataTransfer` API), `IProcessLauncher` — injected via `AttachServices` after construction (no DI container).
 - **Themes** — `AppTheme.axaml` (13-color dark console palette + brushes, merged via `ResourceInclude`), `AppStyles.axaml` (control styles, merged via `StyleInclude`).
@@ -156,7 +156,7 @@ The solution file is `.slnx` format. Code style is enforced at build time for th
 dotnet test tests/CommandPrompts.App.Avalonia.Tests
 ```
 
-Uses `Avalonia.Headless.NUnit` with `PerTest` isolation. Tests are `async Task` awaiting `ExecuteAsync` for deterministic dispatcher pumping. Coverage: load persistence, view binding, run loop exit codes, history replay, idempotent loads, stdin round-trip, crash-safe journaling, fused-line salvage, profile CRUD/validation/fallback, terminate-to-Idle, delete with open journal.
+Uses `Avalonia.Headless.NUnit` with `PerTest` isolation. Tests are `async Task` awaiting `ExecuteAsync` for deterministic dispatcher pumping. Coverage: load persistence, view binding, run loop exit codes, history replay, idempotent loads, stdin round-trip, crash-safe journaling, fused-line salvage, profile CRUD/validation/fallback, terminate-to-Idle, delete with open journal, multi-line argument parsing/quoting/quoted-text, Esc-to-clear selection.
 
 ## Conventions
 
